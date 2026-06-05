@@ -306,7 +306,7 @@ class RateLimitClient {
         lastFetchTime = Date()
         for acct in accounts {
             if acct.accessToken.isEmpty || acct.accountId == "?" {
-                usageByAlias[acct.alias] = .failed("No credentials")
+                usageByAlias[acct.alias] = .failed("缺少登录凭据")
                 continue
             }
             // Only show loading if no previous data
@@ -332,14 +332,14 @@ class RateLimitClient {
         let alias = acct.alias
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
-            if error != nil { self.setState(alias, .failed("Network error")); return }
+            if error != nil { self.setState(alias, .failed("网络错误")); return }
             guard let http = response as? HTTPURLResponse, let data = data else {
-                self.setState(alias, .failed("No response")); return
+                self.setState(alias, .failed("无响应")); return
             }
-            if http.statusCode == 401 { self.setState(alias, .failed("Token expired")); return }
+            if http.statusCode == 401 { self.setState(alias, .failed("Token 已过期")); return }
             if http.statusCode != 200 { self.setState(alias, .failed("HTTP \(http.statusCode)")); return }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                self.setState(alias, .failed("Parse error")); return
+                self.setState(alias, .failed("解析失败")); return
             }
             self.setState(alias, .success(self.parseResponse(json)))
         }.resume()
@@ -578,11 +578,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func formatResetTime(_ date: Date?) -> String {
         guard let d = date else { return "" }
         let mins = Int(d.timeIntervalSinceNow / 60)
-        if mins <= 0 { return "now" }
-        if mins < 60 { return "\(mins)m" }
+        if mins <= 0 { return "现在" }
+        if mins < 60 { return "\(mins)分" }
         let hours = mins / 60; let remMins = mins % 60
-        if hours < 24 { return remMins > 0 ? "\(hours)h\(remMins)m" : "\(hours)h" }
-        return "\(hours / 24)d\(hours % 24)h"
+        if hours < 24 { return remMins > 0 ? "\(hours)小时\(remMins)分" : "\(hours)小时" }
+        return "\(hours / 24)天\(hours % 24)小时"
     }
 
     private func makeProgressBar(remaining: Int, width: CGFloat = 100, height: CGFloat = 8) -> NSImage {
@@ -642,16 +642,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
                 // Send notification on new alerts (not on every refresh)
                 if alert5h && !previousAlertState.p5h {
-                    sendNotification(title: "\(acct.alias) - 5h Quota Low",
-                        body: "5h remaining: \(p5h)%")
+                    sendNotification(title: "\(acct.alias) - 5h 额度不足",
+                        body: "5h 剩余：\(p5h)%")
                 }
                 if alertWk && !previousAlertState.pWk {
-                    sendNotification(title: "\(acct.alias) - Weekly Quota Low",
-                        body: "Weekly remaining: \(pWk)%")
+                    sendNotification(title: "\(acct.alias) - 每周额度不足",
+                        body: "每周剩余：\(pWk)%")
                 }
                 previousAlertState = (alert5h, alertWk)
 
-                button.toolTip = "Codex: \(acct.alias) | 5h: \(p5h)% | Week: \(pWk)%"
+                button.toolTip = "Codex: \(acct.alias) | 5h: \(p5h)% | 周: \(pWk)%"
             } else {
                 button.toolTip = "Codex: \(active?.alias ?? current)"
             }
@@ -681,11 +681,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // ─── Actions ───
-        addMenuItem(menu, "Refresh All", #selector(refreshUsage), "r")
-        addMenuItem(menu, "Add Account...", #selector(addAccount), "")
+        addMenuItem(menu, "刷新全部", #selector(refreshUsage), "r")
+        addMenuItem(menu, "添加账号...", #selector(addAccount), "")
 
         if !others.isEmpty {
-            let removeItem = NSMenuItem(title: "Remove Account", action: nil, keyEquivalent: "")
+            let removeItem = NSMenuItem(title: "移除账号", action: nil, keyEquivalent: "")
             let sub = NSMenu()
             for acct in others {
                 let item = NSMenuItem(title: acct.alias, action: #selector(deleteAccount(_:)), keyEquivalent: "")
@@ -698,7 +698,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")
+        let launchItem = NSMenuItem(title: "登录时启动", action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")
         launchItem.target = self
         if #available(macOS 13.0, *) {
             launchItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
@@ -706,14 +706,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(launchItem)
 
         // Settings submenu
-        let settingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+        let settingsItem = NSMenuItem(title: "设置", action: nil, keyEquivalent: "")
         let settingsMenu = NSMenu()
 
         // Auto refresh
-        let refreshHeader = NSMenuItem(title: "Auto Refresh", action: nil, keyEquivalent: "")
+        let refreshHeader = NSMenuItem(title: "自动刷新", action: nil, keyEquivalent: "")
         refreshHeader.isEnabled = false
         settingsMenu.addItem(refreshHeader)
-        for (label, mins) in [("5 min", 5), ("15 min", 15), ("30 min", 30), ("1 hour", 60), ("2 hours", 120), ("Off", 0)] {
+        for (label, mins) in [("5 分钟", 5), ("15 分钟", 15), ("30 分钟", 30), ("1 小时", 60), ("2 小时", 120), ("关闭", 0)] {
             let opt = NSMenuItem(title: "  \(label)", action: #selector(setRefreshInterval(_:)), keyEquivalent: "")
             opt.target = self; opt.tag = mins
             opt.state = config.refreshIntervalMinutes == mins ? .on : .off
@@ -723,7 +723,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsMenu.addItem(NSMenuItem.separator())
 
         // 5h alert threshold
-        let alert5hHeader = NSMenuItem(title: "5h Alert Below", action: nil, keyEquivalent: "")
+        let alert5hHeader = NSMenuItem(title: "5 小时额度低于", action: nil, keyEquivalent: "")
         alert5hHeader.isEnabled = false
         settingsMenu.addItem(alert5hHeader)
         for pct in [10, 20, 30, 50] {
@@ -736,7 +736,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsMenu.addItem(NSMenuItem.separator())
 
         // Week alert threshold
-        let alertWkHeader = NSMenuItem(title: "Week Alert Below", action: nil, keyEquivalent: "")
+        let alertWkHeader = NSMenuItem(title: "每周额度低于", action: nil, keyEquivalent: "")
         alertWkHeader.isEnabled = false
         settingsMenu.addItem(alertWkHeader)
         for pct in [5, 10, 20, 30] {
@@ -748,13 +748,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         settingsMenu.addItem(NSMenuItem.separator())
 
-        let restartHeader = NSMenuItem(title: "After Account Switch", action: nil, keyEquivalent: "")
+        let restartHeader = NSMenuItem(title: "切换账号后", action: nil, keyEquivalent: "")
         restartHeader.isEnabled = false
         settingsMenu.addItem(restartHeader)
         for (label, mode) in [
-            ("  Ask to Restart Codex", RestartCodexAfterSwitch.ask),
-            ("  Restart Codex Automatically", RestartCodexAfterSwitch.auto),
-            ("  Do Nothing", RestartCodexAfterSwitch.off)
+            ("  询问是否重启 Codex", RestartCodexAfterSwitch.ask),
+            ("  自动重启 Codex", RestartCodexAfterSwitch.auto),
+            ("  不处理", RestartCodexAfterSwitch.off)
         ] {
             let opt = NSMenuItem(title: label, action: #selector(setRestartCodexAfterSwitch(_:)), keyEquivalent: "")
             opt.target = self; opt.representedObject = mode.rawValue
@@ -765,7 +765,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsItem.submenu = settingsMenu
         menu.addItem(settingsItem)
 
-        addMenuItem(menu, "Quit", #selector(quit), "q")
+        addMenuItem(menu, "退出", #selector(quit), "q")
         statusItem.menu = menu
     }
 
@@ -831,7 +831,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             if let sec = rl.secondary {
                 s.append(NSAttributedString(string: "\n\(indent) ", attributes: [.font: NSFont.systemFont(ofSize: 11)]))
-                s.append(NSAttributedString(string: "Week ", attributes: [.font: labelFont, .foregroundColor: labelColor]))
+                s.append(NSAttributedString(string: "周   ", attributes: [.font: labelFont, .foregroundColor: labelColor]))
                 s.append(barAttachment(remaining: sec.remaining))
                 s.append(NSAttributedString(string: " ", attributes: [.font: NSFont.systemFont(ofSize: 4)]))
                 let pctStr = String(format: "%3d%%", sec.remaining)
@@ -843,7 +843,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
 
         case .loading:
-            s.append(NSAttributedString(string: "\n\(indent) Loading...", attributes: [
+            s.append(NSAttributedString(string: "\n\(indent) 加载中...", attributes: [
                 .font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor.tertiaryLabelColor
             ]))
 
@@ -877,11 +877,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let self = self else { return }
                 self.rateLimitClient.fetchAll(self.authManager.listAccounts())
             }
-            sendNotification(title: "Codex Account Switched", body: "Now using: \(alias)")
+            sendNotification(title: "Codex 账号已切换", body: "当前使用：\(alias)")
             handleCodexDesktopRefreshAfterSwitch()
         } else {
-            let a = NSAlert(); a.messageText = "Switch Failed"
-            a.informativeText = "Could not switch to '\(alias)'"; a.alertStyle = .warning; a.runModal()
+            let a = NSAlert(); a.messageText = "切换失败"
+            a.informativeText = "无法切换到“\(alias)”"; a.alertStyle = .warning; a.runModal()
         }
     }
 
@@ -894,11 +894,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .ask:
             guard isCodexDesktopRunning() else { return }
             let alert = NSAlert()
-            alert.messageText = "Restart Codex Desktop?"
-            alert.informativeText = "Restart Codex Desktop to apply the account switch."
+            alert.messageText = "重启 Codex 桌面端？"
+            alert.informativeText = "重启 Codex 桌面端以应用账号切换。"
             alert.alertStyle = .informational
-            alert.addButton(withTitle: "Restart Now")
-            alert.addButton(withTitle: "Later")
+            alert.addButton(withTitle: "立即重启")
+            alert.addButton(withTitle: "稍后")
             if alert.runModal() == .alertFirstButtonReturn {
                 restartCodexDesktopIfRunning()
             }
@@ -922,20 +922,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         guard !isCodexDesktopRunning() else {
-            showCodexRestartError("Codex Desktop did not quit. Please restart it manually to apply the account switch.")
+            showCodexRestartError("Codex 桌面端没有退出。请手动重启 Codex 以应用账号切换。")
             return
         }
 
         let appURL = URL(fileURLWithPath: "/Applications/Codex.app")
         guard FileManager.default.fileExists(atPath: appURL.path) else {
-            showCodexRestartError("Could not find /Applications/Codex.app. Please open Codex manually.")
+            showCodexRestartError("找不到 /Applications/Codex.app。请手动打开 Codex。")
             return
         }
 
         NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration()) { _, error in
             if let error = error {
                 DispatchQueue.main.async {
-                    self.showCodexRestartError("Could not reopen Codex Desktop: \(error.localizedDescription)")
+                    self.showCodexRestartError("无法重新打开 Codex 桌面端：\(error.localizedDescription)")
                 }
             }
         }
@@ -943,7 +943,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func showCodexRestartError(_ message: String) {
         let alert = NSAlert()
-        alert.messageText = "Could Not Restart Codex"
+        alert.messageText = "无法重启 Codex"
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.runModal()
@@ -952,13 +952,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func deleteAccount(_ sender: NSMenuItem) {
         guard let alias = sender.representedObject as? String else { return }
         if alias == authManager.currentAlias() {
-            let a = NSAlert(); a.messageText = "Cannot Remove Active Account"
-            a.informativeText = "Switch to another account first."; a.alertStyle = .warning; a.runModal()
+            let a = NSAlert(); a.messageText = "无法移除当前账号"
+            a.informativeText = "请先切换到其他账号。"; a.alertStyle = .warning; a.runModal()
             return
         }
-        let c = NSAlert(); c.messageText = "Remove '\(alias)'?"
-        c.informativeText = "You can re-add it later with Login."
-        c.alertStyle = .warning; c.addButton(withTitle: "Remove"); c.addButton(withTitle: "Cancel")
+        let c = NSAlert(); c.messageText = "移除“\(alias)”？"
+        c.informativeText = "之后可以通过登录重新添加。"
+        c.alertStyle = .warning; c.addButton(withTitle: "移除"); c.addButton(withTitle: "取消")
         if c.runModal() == .alertFirstButtonReturn {
             if authManager.deleteAccount(alias: alias) {
                 rateLimitClient.usageByAlias.removeValue(forKey: alias); updateMenu()
@@ -972,11 +972,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func addAccount() {
         let confirm = NSAlert()
-        confirm.messageText = "Add Codex Account"
-        confirm.informativeText = "CodexSwitcher will save the current account, temporarily move auth.json aside, then open Terminal to run codex login. Do not use codex logout."
+        confirm.messageText = "添加 Codex 账号"
+        confirm.informativeText = "CodexSwitcher 会保存当前账号，临时移走 auth.json，然后打开终端运行 codex login。不要使用 codex logout。"
         confirm.alertStyle = .informational
-        confirm.addButton(withTitle: "Start Login")
-        confirm.addButton(withTitle: "Cancel")
+        confirm.addButton(withTitle: "开始登录")
+        confirm.addButton(withTitle: "取消")
         guard confirm.runModal() == .alertFirstButtonReturn else { return }
 
         var backupFile: String?
@@ -989,17 +989,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let backupFile = backupFile {
                 do {
                     try authManager.restoreAuthFromBackup(backupFile)
-                    restoreMessage = "\n\nYour previous auth.json has been restored."
+                    restoreMessage = "\n\n已恢复之前的 auth.json。"
                     updateMenu()
                 } catch {
-                    restoreMessage = "\n\nCould not restore auth.json automatically. Backup: \(backupFile)"
+                    restoreMessage = "\n\n无法自动恢复 auth.json。备份位置：\(backupFile)"
                 }
             } else {
                 restoreMessage = ""
             }
 
             let alert = NSAlert()
-            alert.messageText = "Could Not Start Login"
+            alert.messageText = "无法启动登录"
             alert.informativeText = error.localizedDescription + restoreMessage
             alert.alertStyle = .warning
             alert.runModal()
@@ -1010,30 +1010,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let scriptURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("codex-switcher-login.command")
         let backupLine = backupFile.map {
-            "echo \(shellQuoted("Previous auth.json backup: \($0)"))"
-        } ?? "echo 'No existing auth.json was found.'"
+            "echo \(shellQuoted("之前的 auth.json 备份：\($0)"))"
+        } ?? "echo '未找到现有 auth.json。'"
         let script = """
         #!/bin/zsh
         clear
-        echo 'CodexSwitcher - Add Account'
+        echo 'CodexSwitcher - 添加账号'
         echo
-        echo 'This flow does not run codex logout.'
+        echo '此流程不会运行 codex logout。'
         \(backupLine)
         echo
-        echo 'Starting codex login...'
+        echo '正在启动 codex login...'
         echo
         codex login
         echo
-        echo 'When login finishes, CodexSwitcher will detect the new auth.json automatically.'
-        echo 'You can close this window.'
-        read -k 1 '?Press any key to close...'
+        echo '登录完成后，CodexSwitcher 会自动检测新的 auth.json。'
+        echo '你可以关闭此窗口。'
+        read -k 1 '?按任意键关闭...'
         """
 
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
         if !NSWorkspace.shared.open(scriptURL) {
             throw NSError(domain: "CodexSwitcher", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Could not open Terminal for codex login."
+                NSLocalizedDescriptionKey: "无法打开终端运行 codex login。"
             ])
         }
     }

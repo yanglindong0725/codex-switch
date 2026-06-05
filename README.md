@@ -3,7 +3,7 @@
 在菜单栏中切换多个 Codex 账号，并快速查看额度使用情况。
 
 <p align="center">
-  <img src="screenshot.png" width="360" alt="Codex Switch menu bar">
+  <img src="screenshot.png" width="360" alt="Codex Switch 菜单栏">
 </p>
 
 ## 安装
@@ -23,7 +23,7 @@ open CodexSwitcher.app
 
 ## 添加另一个账号
 
-在菜单栏应用中点击 **Add Account...**。CodexSwitcher 会先保存当前的
+在菜单栏应用中点击 **添加账号...**。CodexSwitcher 会先保存当前的
 `~/.codex/auth.json`，再把它临时移走，并打开终端运行：
 
 ```bash
@@ -37,9 +37,9 @@ codex login
 
 Codex 桌面端可能会缓存账号状态。切换账号后，如果桌面端没有立即更新，可以在设置中选择：
 
-- **Ask to Restart Codex**：切换后询问是否重启 Codex 桌面端
-- **Restart Codex Automatically**：切换后自动重启 Codex 桌面端
-- **Do Nothing**：只切换 `~/.codex/auth.json`，不处理桌面端
+- **询问是否重启 Codex**：切换后询问是否重启 Codex 桌面端
+- **自动重启 Codex**：切换后自动重启 Codex 桌面端
+- **不处理**：只切换 `~/.codex/auth.json`，不处理桌面端
 
 ## 功能
 
