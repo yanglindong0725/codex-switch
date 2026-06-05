@@ -3,7 +3,7 @@
 在菜单栏中切换多个 Codex 账号，并快速查看额度使用情况。
 
 <p align="center">
-  <img src="screenshot.png" width="360" alt="Codex Switch 菜单栏">
+  <img src="screenshot.png" width="420" alt="Codex Switch 账号额度菜单">
 </p>
 
 ## 安装
