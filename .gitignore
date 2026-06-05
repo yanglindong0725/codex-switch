@@ -1,4 +1,6 @@
 # Build artifacts
+.build/
+.swiftpm/
 CodexSwitcher
 CodexSwitcher.app/
 CodexSwitcher.zip

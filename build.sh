@@ -12,15 +12,13 @@ if [ -z "${CLANG_MODULE_CACHE_PATH:-}" ]; then
 fi
 
 echo "Building ${APP_NAME}..."
-swiftc CodexSwitcher.swift -o "${APP_NAME}" \
-    -framework AppKit \
-    -framework UserNotifications \
-    -framework ServiceManagement \
-    -O
+swift build --disable-sandbox -c release --product CodexSwitch
+BUILD_DIR="$(swift build --disable-sandbox -c release --show-bin-path)"
+EXECUTABLE_PATH="${BUILD_DIR}/CodexSwitch"
 
 # Update app bundle
 mkdir -p "${APP_NAME}.app/Contents/MacOS"
-cp "${APP_NAME}" "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
+cp "${EXECUTABLE_PATH}" "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
 cp Info.plist "${APP_NAME}.app/Contents/Info.plist"
 mkdir -p "${APP_NAME}.app/Contents/Resources"
 cp AppIcon.icns "${APP_NAME}.app/Contents/Resources/AppIcon.icns"
