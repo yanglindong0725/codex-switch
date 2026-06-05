@@ -90,17 +90,16 @@ struct AppConfig {
     var alertWeekThreshold: Int = 10  // alert when week remaining < this %
     var restartCodexAfterSwitch: RestartCodexAfterSwitch = .ask
 
-    private static let configPath: String = {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return "\(home)/.codex/switcher.json"
-    }()
+    private static let configDirectory = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".codex")
+    private static let configURL = configDirectory.appendingPathComponent("switcher.json")
 
     static func load() -> AppConfig {
         var config = AppConfig()
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: configPath)),
+        guard let data = try? Data(contentsOf: configURL),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return config }
-        if let v = json["refresh_interval_minutes"] as? Int, v > 0 { config.refreshIntervalMinutes = v }
+        if let v = json["refresh_interval_minutes"] as? Int, v >= 0 { config.refreshIntervalMinutes = v }
         if let v = json["min_refresh_interval_seconds"] as? Int, v > 0 { config.minRefreshIntervalSeconds = v }
         if let v = json["alert_5h_threshold"] as? Int { config.alert5hThreshold = v }
         if let v = json["alert_week_threshold"] as? Int { config.alertWeekThreshold = v }
@@ -111,7 +110,7 @@ struct AppConfig {
         return config
     }
 
-    func save() {
+    func save() throws {
         let json: [String: Any] = [
             "refresh_interval_minutes": refreshIntervalMinutes,
             "min_refresh_interval_seconds": minRefreshIntervalSeconds,
@@ -119,9 +118,9 @@ struct AppConfig {
             "alert_week_threshold": alertWeekThreshold,
             "restart_codex_after_switch": restartCodexAfterSwitch.rawValue
         ]
-        if let data = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted) {
-            try? data.write(to: URL(fileURLWithPath: AppConfig.configPath))
-        }
+        let data = try JSONSerialization.data(withJSONObject: json, options: .prettyPrinted)
+        try FileManager.default.createDirectory(at: AppConfig.configDirectory, withIntermediateDirectories: true)
+        try data.write(to: AppConfig.configURL, options: .atomic)
     }
 }
 
@@ -168,21 +167,39 @@ class CodexAuthManager {
 
         if !current.isEmpty && current != "?" && fm.fileExists(atPath: authFile) {
             let currentAccountFile = "\(accountsDir)/\(current).json"
-            let tmpFile = currentAccountFile + ".tmp"
+            let tmpFile = currentAccountFile + ".\(UUID().uuidString).tmp"
             do {
-                if fm.fileExists(atPath: tmpFile) { try fm.removeItem(atPath: tmpFile) }
                 try fm.copyItem(atPath: authFile, toPath: tmpFile)
-                if fm.fileExists(atPath: currentAccountFile) { try fm.removeItem(atPath: currentAccountFile) }
-                try fm.moveItem(atPath: tmpFile, toPath: currentAccountFile)
+                try replaceFile(atPath: currentAccountFile, withItemAt: tmpFile)
             } catch { try? fm.removeItem(atPath: tmpFile) }
         }
 
+        let switchID = UUID().uuidString
+        let tmpAuthFile = "\(codexDir)/auth.switch-\(switchID).tmp"
+        let tmpCurrentFile = "\(codexDir)/current.switch-\(switchID).tmp"
         do {
-            if fm.fileExists(atPath: authFile) { try fm.removeItem(atPath: authFile) }
-            try fm.copyItem(atPath: targetFile, toPath: authFile)
-            try alias.write(toFile: currentFile, atomically: true, encoding: .utf8)
+            try fm.copyItem(atPath: targetFile, toPath: tmpAuthFile)
+            try alias.write(toFile: tmpCurrentFile, atomically: true, encoding: .utf8)
+            try replaceFile(atPath: authFile, withItemAt: tmpAuthFile)
+            try replaceFile(atPath: currentFile, withItemAt: tmpCurrentFile)
             return true
-        } catch { return false }
+        } catch {
+            try? fm.removeItem(atPath: tmpAuthFile)
+            try? fm.removeItem(atPath: tmpCurrentFile)
+            return false
+        }
+    }
+
+    private func replaceFile(atPath destinationPath: String, withItemAt replacementPath: String) throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: destinationPath) {
+            _ = try fm.replaceItemAt(URL(fileURLWithPath: destinationPath),
+                                     withItemAt: URL(fileURLWithPath: replacementPath),
+                                     backupItemName: nil,
+                                     options: [])
+        } else {
+            try fm.moveItem(atPath: replacementPath, toPath: destinationPath)
+        }
     }
 
     func syncAuthToAccounts() {
@@ -394,6 +411,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func scheduleTimer() {
         refreshTimer?.invalidate()
+        refreshTimer = nil
+        guard config.refreshIntervalMinutes > 0 else { return }
         let interval = TimeInterval(config.refreshIntervalMinutes * 60)
         refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             guard let self = self else { return }
@@ -812,6 +831,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.runModal()
     }
 
+    private func showConfigSaveError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "无法保存设置"
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.runModal()
+    }
+
+    private func saveConfig() {
+        do {
+            try config.save()
+        } catch {
+            showConfigSaveError(error)
+        }
+    }
+
     @objc private func deleteAccount(_ sender: NSMenuItem) {
         guard let alias = sender.representedObject as? String else { return }
         if alias == authManager.currentAlias() {
@@ -907,24 +942,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func setRefreshInterval(_ sender: NSMenuItem) {
         config.refreshIntervalMinutes = sender.tag
-        config.save(); scheduleTimer(); updateMenu()
+        saveConfig(); scheduleTimer(); updateMenu()
     }
 
     @objc private func setAlert5hThreshold(_ sender: NSMenuItem) {
         config.alert5hThreshold = sender.tag
-        config.save(); previousAlertState = (false, false); updateMenu()
+        saveConfig(); previousAlertState = (false, false); updateMenu()
     }
 
     @objc private func setAlertWeekThreshold(_ sender: NSMenuItem) {
         config.alertWeekThreshold = sender.tag
-        config.save(); previousAlertState = (false, false); updateMenu()
+        saveConfig(); previousAlertState = (false, false); updateMenu()
     }
 
     @objc private func setRestartCodexAfterSwitch(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String,
               let mode = RestartCodexAfterSwitch(rawValue: value) else { return }
         config.restartCodexAfterSwitch = mode
-        config.save(); updateMenu()
+        saveConfig(); updateMenu()
     }
 
     @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
@@ -933,7 +968,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
                 else { try SMAppService.mainApp.register() }
                 updateMenu()
-            } catch {}
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "无法更新登录项"
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
         }
     }
 
