@@ -836,7 +836,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func addAccount() {
         let confirm = NSAlert()
         confirm.messageText = "添加 Codex 账号"
-        confirm.informativeText = "CodexSwitcher 会保存当前账号，临时移走 auth.json，然后打开终端运行 codex login。不要使用 codex logout。"
+        confirm.informativeText = "Codex Switch 会保存当前账号，临时移走 auth.json，然后打开终端运行 codex login。不要使用 codex logout。"
         confirm.alertStyle = .informational
         confirm.addButton(withTitle: "开始登录")
         confirm.addButton(withTitle: "取消")
@@ -878,7 +878,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let script = """
         #!/bin/zsh
         clear
-        echo 'CodexSwitcher - 添加账号'
+        echo 'Codex Switch - 添加账号'
         echo
         echo '此流程不会运行 codex logout。'
         \(backupLine)
@@ -887,7 +887,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         echo
         codex login
         echo
-        echo '登录完成后，CodexSwitcher 会自动检测新的 auth.json。'
+        echo '登录完成后，Codex Switch 会自动检测新的 auth.json。'
         echo '你可以关闭此窗口。'
         read -k 1 '?按任意键关闭...'
         """
@@ -895,7 +895,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
         if !NSWorkspace.shared.open(scriptURL) {
-            throw NSError(domain: "CodexSwitcher", code: 1, userInfo: [
+            throw NSError(domain: "Codex Switch", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "无法打开终端运行 codex login。"
             ])
         }

@@ -1,18 +1,28 @@
 #!/bin/bash
 set -e
 
-echo "Building CodexSwitcher..."
-swiftc CodexSwitcher.swift -o CodexSwitcher \
+APP_NAME="Codex Switch"
+
+if [ -z "${DEVELOPER_DIR:-}" ] && [ -d "/Applications/Xcode.app/Contents/Developer" ]; then
+    export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+fi
+
+if [ -z "${CLANG_MODULE_CACHE_PATH:-}" ]; then
+    export CLANG_MODULE_CACHE_PATH="${TMPDIR:-/tmp}/codex-switch-module-cache"
+fi
+
+echo "Building ${APP_NAME}..."
+swiftc CodexSwitcher.swift -o "${APP_NAME}" \
     -framework AppKit \
     -framework UserNotifications \
     -framework ServiceManagement \
     -O
 
 # Update app bundle
-mkdir -p CodexSwitcher.app/Contents/MacOS
-cp CodexSwitcher CodexSwitcher.app/Contents/MacOS/CodexSwitcher
-cp Info.plist CodexSwitcher.app/Contents/Info.plist
-mkdir -p CodexSwitcher.app/Contents/Resources
-cp AppIcon.icns CodexSwitcher.app/Contents/Resources/AppIcon.icns
+mkdir -p "${APP_NAME}.app/Contents/MacOS"
+cp "${APP_NAME}" "${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
+cp Info.plist "${APP_NAME}.app/Contents/Info.plist"
+mkdir -p "${APP_NAME}.app/Contents/Resources"
+cp AppIcon.icns "${APP_NAME}.app/Contents/Resources/AppIcon.icns"
 
-echo "Done. Run with: open CodexSwitcher.app"
+echo "Done. Run with: open '${APP_NAME}.app'"

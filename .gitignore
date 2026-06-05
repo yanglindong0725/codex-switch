@@ -2,5 +2,9 @@
 CodexSwitcher
 CodexSwitcher.app/
 CodexSwitcher.zip
+Codex Switch
+Codex Switch.app/
+Codex-Switch-*.dmg
+Codex-Switch-*.zip
+release/
 .DS_Store
-release.sh
