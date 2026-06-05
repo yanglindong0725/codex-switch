@@ -21,6 +21,19 @@ bash build.sh
 open CodexSwitcher.app
 ```
 
+## Add another account
+
+Use **Add Account...** from the menu bar app. CodexSwitcher saves your current
+`~/.codex/auth.json`, moves it aside, and opens Terminal to run:
+
+```bash
+codex login
+```
+
+Do not run `codex logout` when adding another account. Logging out can expire
+the current token; CodexSwitcher only moves auth files so the saved account can
+be switched back later.
+
 ## What it does
 
 - **One-click account switching** from the menu bar

@@ -199,6 +199,37 @@ class CodexAuthManager {
         try? alias.write(toFile: currentFile, atomically: true, encoding: .utf8)
     }
 
+    func prepareForNewLogin() throws -> String? {
+        let fm = FileManager.default
+        try fm.createDirectory(atPath: codexDir, withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: accountsDir, withIntermediateDirectories: true)
+
+        syncAuthToAccounts()
+
+        guard fm.fileExists(atPath: authFile) else { return nil }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let baseBackupFile = "\(codexDir)/auth.switcher-backup-\(formatter.string(from: Date()))"
+        var backupFile = "\(baseBackupFile).json"
+        var index = 1
+        while fm.fileExists(atPath: backupFile) {
+            backupFile = "\(baseBackupFile)-\(index).json"
+            index += 1
+        }
+        try fm.copyItem(atPath: authFile, toPath: backupFile)
+        try fm.removeItem(atPath: authFile)
+        return backupFile
+    }
+
+    func restoreAuthFromBackup(_ backupFile: String) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: backupFile) else { return }
+        if fm.fileExists(atPath: authFile) { try fm.removeItem(atPath: authFile) }
+        try fm.copyItem(atPath: backupFile, toPath: authFile)
+    }
+
     func deleteAccount(alias: String) -> Bool {
         let accountFile = "\(accountsDir)/\(alias).json"
         return (try? FileManager.default.removeItem(atPath: accountFile)) != nil
@@ -639,6 +670,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // ─── Actions ───
         addMenuItem(menu, "Refresh All", #selector(refreshUsage), "r")
+        addMenuItem(menu, "Add Account...", #selector(addAccount), "")
 
         if !others.isEmpty {
             let removeItem = NSMenuItem(title: "Remove Account", action: nil, keyEquivalent: "")
@@ -843,6 +875,78 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func refreshUsage() {
         rateLimitClient.fetchAll(authManager.listAccounts())
+    }
+
+    @objc private func addAccount() {
+        let confirm = NSAlert()
+        confirm.messageText = "Add Codex Account"
+        confirm.informativeText = "CodexSwitcher will save the current account, temporarily move auth.json aside, then open Terminal to run codex login. Do not use codex logout."
+        confirm.alertStyle = .informational
+        confirm.addButton(withTitle: "Start Login")
+        confirm.addButton(withTitle: "Cancel")
+        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+
+        var backupFile: String?
+        do {
+            backupFile = try authManager.prepareForNewLogin()
+            updateMenu()
+            try openCodexLoginTerminal(backupFile: backupFile)
+        } catch {
+            let restoreMessage: String
+            if let backupFile = backupFile {
+                do {
+                    try authManager.restoreAuthFromBackup(backupFile)
+                    restoreMessage = "\n\nYour previous auth.json has been restored."
+                    updateMenu()
+                } catch {
+                    restoreMessage = "\n\nCould not restore auth.json automatically. Backup: \(backupFile)"
+                }
+            } else {
+                restoreMessage = ""
+            }
+
+            let alert = NSAlert()
+            alert.messageText = "Could Not Start Login"
+            alert.informativeText = error.localizedDescription + restoreMessage
+            alert.alertStyle = .warning
+            alert.runModal()
+        }
+    }
+
+    private func openCodexLoginTerminal(backupFile: String?) throws {
+        let scriptURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("codex-switcher-login.command")
+        let backupLine = backupFile.map {
+            "echo \(shellQuoted("Previous auth.json backup: \($0)"))"
+        } ?? "echo 'No existing auth.json was found.'"
+        let script = """
+        #!/bin/zsh
+        clear
+        echo 'CodexSwitcher - Add Account'
+        echo
+        echo 'This flow does not run codex logout.'
+        \(backupLine)
+        echo
+        echo 'Starting codex login...'
+        echo
+        codex login
+        echo
+        echo 'When login finishes, CodexSwitcher will detect the new auth.json automatically.'
+        echo 'You can close this window.'
+        read -k 1 '?Press any key to close...'
+        """
+
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        if !NSWorkspace.shared.open(scriptURL) {
+            throw NSError(domain: "CodexSwitcher", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Could not open Terminal for codex login."
+            ])
+        }
+    }
+
+    private func shellQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
     @objc private func setRefreshInterval(_ sender: NSMenuItem) {
