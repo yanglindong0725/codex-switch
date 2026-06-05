@@ -77,11 +77,18 @@ enum FetchState {
 
 // MARK: - Config
 
+enum RestartCodexAfterSwitch: String {
+    case ask
+    case auto
+    case off
+}
+
 struct AppConfig {
     var refreshIntervalMinutes: Int = 30
     var minRefreshIntervalSeconds: Int = 30
     var alert5hThreshold: Int = 30    // alert when 5h remaining < this %
     var alertWeekThreshold: Int = 10  // alert when week remaining < this %
+    var restartCodexAfterSwitch: RestartCodexAfterSwitch = .ask
 
     private static let configPath: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -97,6 +104,10 @@ struct AppConfig {
         if let v = json["min_refresh_interval_seconds"] as? Int, v > 0 { config.minRefreshIntervalSeconds = v }
         if let v = json["alert_5h_threshold"] as? Int { config.alert5hThreshold = v }
         if let v = json["alert_week_threshold"] as? Int { config.alertWeekThreshold = v }
+        if let v = json["restart_codex_after_switch"] as? String,
+           let mode = RestartCodexAfterSwitch(rawValue: v) {
+            config.restartCodexAfterSwitch = mode
+        }
         return config
     }
 
@@ -105,7 +116,8 @@ struct AppConfig {
             "refresh_interval_minutes": refreshIntervalMinutes,
             "min_refresh_interval_seconds": minRefreshIntervalSeconds,
             "alert_5h_threshold": alert5hThreshold,
-            "alert_week_threshold": alertWeekThreshold
+            "alert_week_threshold": alertWeekThreshold,
+            "restart_codex_after_switch": restartCodexAfterSwitch.rawValue
         ]
         if let data = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted) {
             try? data.write(to: URL(fileURLWithPath: AppConfig.configPath))
@@ -734,6 +746,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settingsMenu.addItem(opt)
         }
 
+        settingsMenu.addItem(NSMenuItem.separator())
+
+        let restartHeader = NSMenuItem(title: "After Account Switch", action: nil, keyEquivalent: "")
+        restartHeader.isEnabled = false
+        settingsMenu.addItem(restartHeader)
+        for (label, mode) in [
+            ("  Ask to Restart Codex", RestartCodexAfterSwitch.ask),
+            ("  Restart Codex Automatically", RestartCodexAfterSwitch.auto),
+            ("  Do Nothing", RestartCodexAfterSwitch.off)
+        ] {
+            let opt = NSMenuItem(title: label, action: #selector(setRestartCodexAfterSwitch(_:)), keyEquivalent: "")
+            opt.target = self; opt.representedObject = mode.rawValue
+            opt.state = config.restartCodexAfterSwitch == mode ? .on : .off
+            settingsMenu.addItem(opt)
+        }
+
         settingsItem.submenu = settingsMenu
         menu.addItem(settingsItem)
 
@@ -850,10 +878,75 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.rateLimitClient.fetchAll(self.authManager.listAccounts())
             }
             sendNotification(title: "Codex Account Switched", body: "Now using: \(alias)")
+            handleCodexDesktopRefreshAfterSwitch()
         } else {
             let a = NSAlert(); a.messageText = "Switch Failed"
             a.informativeText = "Could not switch to '\(alias)'"; a.alertStyle = .warning; a.runModal()
         }
+    }
+
+    private func handleCodexDesktopRefreshAfterSwitch() {
+        switch config.restartCodexAfterSwitch {
+        case .off:
+            return
+        case .auto:
+            restartCodexDesktopIfRunning()
+        case .ask:
+            guard isCodexDesktopRunning() else { return }
+            let alert = NSAlert()
+            alert.messageText = "Restart Codex Desktop?"
+            alert.informativeText = "Restart Codex Desktop to apply the account switch."
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Restart Now")
+            alert.addButton(withTitle: "Later")
+            if alert.runModal() == .alertFirstButtonReturn {
+                restartCodexDesktopIfRunning()
+            }
+        }
+    }
+
+    private func isCodexDesktopRunning() -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: "com.openai.codex").isEmpty
+    }
+
+    private func restartCodexDesktopIfRunning() {
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: "com.openai.codex")
+        guard !apps.isEmpty else { return }
+
+        for app in apps { app.terminate() }
+
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if !isCodexDesktopRunning() { break }
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
+        }
+
+        guard !isCodexDesktopRunning() else {
+            showCodexRestartError("Codex Desktop did not quit. Please restart it manually to apply the account switch.")
+            return
+        }
+
+        let appURL = URL(fileURLWithPath: "/Applications/Codex.app")
+        guard FileManager.default.fileExists(atPath: appURL.path) else {
+            showCodexRestartError("Could not find /Applications/Codex.app. Please open Codex manually.")
+            return
+        }
+
+        NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+            if let error = error {
+                DispatchQueue.main.async {
+                    self.showCodexRestartError("Could not reopen Codex Desktop: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func showCodexRestartError(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Could Not Restart Codex"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.runModal()
     }
 
     @objc private func deleteAccount(_ sender: NSMenuItem) {
@@ -962,6 +1055,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func setAlertWeekThreshold(_ sender: NSMenuItem) {
         config.alertWeekThreshold = sender.tag
         config.save(); previousAlertState = (false, false); updateMenu()
+    }
+
+    @objc private func setRestartCodexAfterSwitch(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String,
+              let mode = RestartCodexAfterSwitch(rawValue: value) else { return }
+        config.restartCodexAfterSwitch = mode
+        config.save(); updateMenu()
     }
 
     @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
