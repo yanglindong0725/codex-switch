@@ -2,24 +2,38 @@ import Foundation
 
 // MARK: - Config
 
-enum RestartCodexAfterSwitch: String {
+public enum RestartCodexAfterSwitch: String {
     case ask
     case auto
     case off
 }
 
-struct AppConfig {
-    var refreshIntervalMinutes: Int = 30
-    var minRefreshIntervalSeconds: Int = 30
-    var alert5hThreshold: Int = 30    // alert when 5h remaining < this %
-    var alertWeekThreshold: Int = 10  // alert when week remaining < this %
-    var restartCodexAfterSwitch: RestartCodexAfterSwitch = .ask
+public struct AppConfig {
+    public var refreshIntervalMinutes: Int = 30
+    public var minRefreshIntervalSeconds: Int = 30
+    public var alert5hThreshold: Int = 30    // alert when 5h remaining < this %
+    public var alertWeekThreshold: Int = 10  // alert when week remaining < this %
+    public var restartCodexAfterSwitch: RestartCodexAfterSwitch = .ask
+
+    public init(
+        refreshIntervalMinutes: Int = 30,
+        minRefreshIntervalSeconds: Int = 30,
+        alert5hThreshold: Int = 30,
+        alertWeekThreshold: Int = 10,
+        restartCodexAfterSwitch: RestartCodexAfterSwitch = .ask
+    ) {
+        self.refreshIntervalMinutes = refreshIntervalMinutes
+        self.minRefreshIntervalSeconds = minRefreshIntervalSeconds
+        self.alert5hThreshold = alert5hThreshold
+        self.alertWeekThreshold = alertWeekThreshold
+        self.restartCodexAfterSwitch = restartCodexAfterSwitch
+    }
 
     private static let configDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".codex")
     private static let configURL = configDirectory.appendingPathComponent("switcher.json")
 
-    static func load() -> AppConfig {
+    public static func load() -> AppConfig {
         var config = AppConfig()
         guard let data = try? Data(contentsOf: configURL),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -35,7 +49,7 @@ struct AppConfig {
         return config
     }
 
-    func save() throws {
+    public func save() throws {
         let json: [String: Any] = [
             "refresh_interval_minutes": refreshIntervalMinutes,
             "min_refresh_interval_seconds": minRefreshIntervalSeconds,

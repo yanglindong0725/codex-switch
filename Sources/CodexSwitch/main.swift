@@ -1,12 +1,16 @@
 import AppKit
+import CodexSwitchPreview
 import Foundation
 import ServiceManagement
+import SwiftUI
 import UserNotifications
 
 // MARK: - Menu Bar App
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
+    private var popover: NSPopover!
+    private var viewModel: SwitcherViewModel!
     private let authManager = CodexAuthManager.shared
     private var fileMonitor: DispatchSourceFileSystemObject?
     private let rateLimitClient = RateLimitClient()
@@ -16,6 +20,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        viewModel = SwitcherViewModel(actions: makeActions())
+        popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        popover.contentSize = NSSize(width: 430, height: 720)
+        popover.contentViewController = NSHostingController(rootView: CodexSwitchPopoverView(model: viewModel))
         rateLimitClient.onUpdate = { [weak self] in self?.updateMenu() }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         authManager.syncAuthToAccounts()
@@ -23,6 +33,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         watchAuthFile()
         rateLimitClient.fetchAll(authManager.listAccounts())
         scheduleTimer()
+    }
+
+    private func makeActions() -> SwitcherActions {
+        SwitcherActions(
+            refreshUsage: { [weak self] in self?.refreshUsage() },
+            addAccount: { [weak self] in self?.addAccount() },
+            switchAccount: { [weak self] alias in self?.switchAccount(alias: alias) },
+            deleteAccount: { [weak self] alias in self?.deleteAccount(alias: alias) },
+            setLaunchAtLogin: { [weak self] enabled in self?.setLaunchAtLogin(enabled) },
+            setRefreshInterval: { [weak self] minutes in self?.setRefreshInterval(minutes) },
+            setAlert5hThreshold: { [weak self] threshold in self?.setAlert5hThreshold(threshold) },
+            setAlertWeekThreshold: { [weak self] threshold in self?.setAlertWeekThreshold(threshold) },
+            setRestartCodexAfterSwitch: { [weak self] mode in self?.setRestartCodexAfterSwitch(mode) },
+            quit: { NSApplication.shared.terminate(nil) }
+        )
     }
 
     private func scheduleTimer() {
@@ -40,6 +65,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         let minInterval = TimeInterval(config.minRefreshIntervalSeconds)
         rateLimitClient.refreshIfNeeded(authManager.listAccounts(), minInterval: minInterval)
+    }
+
+    @objc private func togglePopover(_ sender: Any?) {
+        guard let button = statusItem.button else { return }
+        if popover.isShown {
+            popover.performClose(sender)
+        } else {
+            let minInterval = TimeInterval(config.minRefreshIntervalSeconds)
+            rateLimitClient.refreshIfNeeded(authManager.listAccounts(), minInterval: minInterval)
+            updateMenu()
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
+        }
     }
 
     // MARK: - Drawing Helpers
@@ -73,47 +111,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return img
     }
 
-    private func formatResetTime(_ date: Date?) -> String {
-        guard let d = date else { return "" }
-        let mins = Int(d.timeIntervalSinceNow / 60)
-        if mins <= 0 { return "现在" }
-        if mins < 60 { return "\(mins)分" }
-        let hours = mins / 60; let remMins = mins % 60
-        if hours < 24 { return remMins > 0 ? "\(hours)小时\(remMins)分" : "\(hours)小时" }
-        return "\(hours / 24)天\(hours % 24)小时"
-    }
-
-    private func makeProgressBar(remaining: Int, width: CGFloat = 100, height: CGFloat = 8) -> NSImage {
-        let pct = CGFloat(min(max(remaining, 0), 100)) / 100.0
-        let img = NSImage(size: NSSize(width: width, height: height))
-        img.lockFocus()
-
-        let radius: CGFloat = 4
-        let trackColor = NSColor.separatorColor.withAlphaComponent(0.3)
-        let bgRect = NSRect(x: 0, y: 0, width: width, height: height)
-        trackColor.setFill()
-        NSBezierPath(roundedRect: bgRect, xRadius: radius, yRadius: radius).fill()
-
-        let fillWidth = width * pct
-        if fillWidth > 0 {
-            let window = RateLimitWindow(usedPercent: 100 - remaining, resetsAt: nil)
-            let fillRect = NSRect(x: 0, y: 0, width: fillWidth, height: height)
-            window.barColor.setFill()
-            NSBezierPath(roundedRect: fillRect, xRadius: radius, yRadius: radius).fill()
-        }
-
-        img.unlockFocus()
-        return img
-    }
-
-    private func barAttachment(remaining: Int) -> NSAttributedString {
-        let img = makeProgressBar(remaining: remaining)
-        let att = NSTextAttachment()
-        att.image = img
-        att.bounds = NSRect(x: 0, y: 2, width: img.size.width, height: img.size.height)
-        return NSAttributedString(attachment: att)
-    }
-
     private func sendNotification(title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title; content.body = body; content.sound = .default
@@ -127,9 +124,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let current = authManager.currentAlias()
         let accounts = authManager.listAccounts()
         let active = accounts.first(where: { $0.alias == current })
-        let others = accounts.filter { $0.alias != current }
 
-        // Status bar - icon only, with red dot alerts
+        viewModel?.update(currentAlias: current, accounts: accounts, usageByAlias: rateLimitClient.usageByAlias, config: config)
+
         if let button = statusItem.button {
             var alert5h = false, alertWk = false
             if let acct = active, case .success(let rl) = rateLimitClient.usageByAlias[acct.alias] {
@@ -157,217 +154,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.image = makeStatusIcon(state: iconState)
             button.title = ""
             button.imagePosition = .imageOnly
+            button.target = self
+            button.action = #selector(togglePopover(_:))
         }
-
-        let menu = NSMenu()
-        menu.delegate = self
-        menu.minimumWidth = 320
-
-        // ─── Active Account ───
-        if let acct = active {
-            buildCard(menu, acct, isActive: true)
-            menu.addItem(NSMenuItem.separator())
-        }
-
-        // ─── Other Accounts ───
-        if !others.isEmpty {
-            for (i, account) in others.enumerated() {
-                buildCard(menu, account, isActive: false)
-                if i < others.count - 1 { menu.addItem(NSMenuItem.separator()) }
-            }
-            menu.addItem(NSMenuItem.separator())
-        }
-
-        // ─── Actions ───
-        addMenuItem(menu, "刷新全部", #selector(refreshUsage), "r")
-        addMenuItem(menu, "添加账号...", #selector(addAccount), "")
-
-        if !others.isEmpty {
-            let removeItem = NSMenuItem(title: "移除账号", action: nil, keyEquivalent: "")
-            let sub = NSMenu()
-            for acct in others {
-                let item = NSMenuItem(title: acct.alias, action: #selector(deleteAccount(_:)), keyEquivalent: "")
-                item.target = self; item.representedObject = acct.alias
-                sub.addItem(item)
-            }
-            removeItem.submenu = sub
-            menu.addItem(removeItem)
-        }
-
-        menu.addItem(NSMenuItem.separator())
-
-        let launchItem = NSMenuItem(title: "登录时启动", action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")
-        launchItem.target = self
-        if #available(macOS 13.0, *) {
-            launchItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
-        } else { launchItem.isEnabled = false }
-        menu.addItem(launchItem)
-
-        // Settings submenu
-        let settingsItem = NSMenuItem(title: "设置", action: nil, keyEquivalent: "")
-        let settingsMenu = NSMenu()
-
-        // Auto refresh
-        let refreshHeader = NSMenuItem(title: "自动刷新", action: nil, keyEquivalent: "")
-        refreshHeader.isEnabled = false
-        settingsMenu.addItem(refreshHeader)
-        for (label, mins) in [("5 分钟", 5), ("15 分钟", 15), ("30 分钟", 30), ("1 小时", 60), ("2 小时", 120), ("关闭", 0)] {
-            let opt = NSMenuItem(title: "  \(label)", action: #selector(setRefreshInterval(_:)), keyEquivalent: "")
-            opt.target = self; opt.tag = mins
-            opt.state = config.refreshIntervalMinutes == mins ? .on : .off
-            settingsMenu.addItem(opt)
-        }
-
-        settingsMenu.addItem(NSMenuItem.separator())
-
-        // 5h alert threshold
-        let alert5hHeader = NSMenuItem(title: "5 小时额度低于", action: nil, keyEquivalent: "")
-        alert5hHeader.isEnabled = false
-        settingsMenu.addItem(alert5hHeader)
-        for pct in [10, 20, 30, 50] {
-            let opt = NSMenuItem(title: "  \(pct)%", action: #selector(setAlert5hThreshold(_:)), keyEquivalent: "")
-            opt.target = self; opt.tag = pct
-            opt.state = config.alert5hThreshold == pct ? .on : .off
-            settingsMenu.addItem(opt)
-        }
-
-        settingsMenu.addItem(NSMenuItem.separator())
-
-        // Week alert threshold
-        let alertWkHeader = NSMenuItem(title: "每周额度低于", action: nil, keyEquivalent: "")
-        alertWkHeader.isEnabled = false
-        settingsMenu.addItem(alertWkHeader)
-        for pct in [5, 10, 20, 30] {
-            let opt = NSMenuItem(title: "  \(pct)%", action: #selector(setAlertWeekThreshold(_:)), keyEquivalent: "")
-            opt.target = self; opt.tag = pct
-            opt.state = config.alertWeekThreshold == pct ? .on : .off
-            settingsMenu.addItem(opt)
-        }
-
-        settingsMenu.addItem(NSMenuItem.separator())
-
-        let restartHeader = NSMenuItem(title: "切换账号后", action: nil, keyEquivalent: "")
-        restartHeader.isEnabled = false
-        settingsMenu.addItem(restartHeader)
-        for (label, mode) in [
-            ("  询问是否重启 Codex", RestartCodexAfterSwitch.ask),
-            ("  自动重启 Codex", RestartCodexAfterSwitch.auto),
-            ("  不处理", RestartCodexAfterSwitch.off)
-        ] {
-            let opt = NSMenuItem(title: label, action: #selector(setRestartCodexAfterSwitch(_:)), keyEquivalent: "")
-            opt.target = self; opt.representedObject = mode.rawValue
-            opt.state = config.restartCodexAfterSwitch == mode ? .on : .off
-            settingsMenu.addItem(opt)
-        }
-
-        settingsItem.submenu = settingsMenu
-        menu.addItem(settingsItem)
-
-        addMenuItem(menu, "退出", #selector(quit), "q")
-        statusItem.menu = menu
-    }
-
-    private func addMenuItem(_ menu: NSMenu, _ title: String, _ action: Selector, _ key: String) {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
-        item.target = self
-        menu.addItem(item)
-    }
-
-    private func buildCard(_ menu: NSMenu, _ acct: CodexAccount, isActive: Bool) {
-        let item = NSMenuItem()
-        let s = NSMutableAttributedString()
-        let indent = isActive ? "  " : "  "
-
-        // Row 1: alias + plan
-        if isActive {
-            s.append(NSAttributedString(string: "\u{25CF} ", attributes: [
-                .font: NSFont.systemFont(ofSize: 8), .foregroundColor: NSColor.systemGreen
-            ]))
-        }
-        s.append(NSAttributedString(string: acct.alias, attributes: [
-            .font: NSFont.systemFont(ofSize: 13, weight: isActive ? .semibold : .medium),
-            .foregroundColor: NSColor.labelColor
-        ]))
-
-        // Plan badge
-        let badgeText = " \(acct.planLabel) "
-        s.append(NSAttributedString(string: "  ", attributes: [.font: NSFont.systemFont(ofSize: 9)]))
-
-        let badge = NSMutableAttributedString(string: badgeText, attributes: [
-            .font: NSFont.systemFont(ofSize: 8, weight: .bold),
-            .foregroundColor: acct.planColor,
-            .backgroundColor: acct.planColor.withAlphaComponent(0.12),
-            .baselineOffset: 2
-        ])
-        s.append(badge)
-
-        // Row 2: email
-        s.append(NSAttributedString(string: "\n\(indent) \(acct.email)", attributes: [
-            .font: NSFont.systemFont(ofSize: 10.5),
-            .foregroundColor: NSColor.secondaryLabelColor
-        ]))
-
-        // Row 3-4: usage bars
-        let state = rateLimitClient.usageByAlias[acct.alias] ?? .idle
-        switch state {
-        case .success(let rl):
-            let labelFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
-            let labelColor = NSColor.tertiaryLabelColor
-            let pctFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
-
-            if let p = rl.primary {
-                s.append(NSAttributedString(string: "\n\(indent) ", attributes: [.font: NSFont.systemFont(ofSize: 11)]))
-                s.append(NSAttributedString(string: "5h   ", attributes: [.font: labelFont, .foregroundColor: labelColor]))
-                s.append(barAttachment(remaining: p.remaining))
-                s.append(NSAttributedString(string: " ", attributes: [.font: NSFont.systemFont(ofSize: 4)]))
-                let pctStr = String(format: "%3d%%", p.remaining)
-                s.append(NSAttributedString(string: pctStr, attributes: [.font: pctFont, .foregroundColor: p.textColor]))
-                if let r = p.resetsAt, p.remaining < 100 {
-                    s.append(NSAttributedString(string: "  \(formatResetTime(r))", attributes: [
-                        .font: NSFont.systemFont(ofSize: 9), .foregroundColor: labelColor]))
-                }
-            }
-            if let sec = rl.secondary {
-                s.append(NSAttributedString(string: "\n\(indent) ", attributes: [.font: NSFont.systemFont(ofSize: 11)]))
-                s.append(NSAttributedString(string: "周   ", attributes: [.font: labelFont, .foregroundColor: labelColor]))
-                s.append(barAttachment(remaining: sec.remaining))
-                s.append(NSAttributedString(string: " ", attributes: [.font: NSFont.systemFont(ofSize: 4)]))
-                let pctStr = String(format: "%3d%%", sec.remaining)
-                s.append(NSAttributedString(string: pctStr, attributes: [.font: pctFont, .foregroundColor: sec.textColor]))
-                if let r = sec.resetsAt, sec.remaining < 100 {
-                    s.append(NSAttributedString(string: "  \(formatResetTime(r))", attributes: [
-                        .font: NSFont.systemFont(ofSize: 9), .foregroundColor: labelColor]))
-                }
-            }
-
-        case .loading:
-            s.append(NSAttributedString(string: "\n\(indent) 加载中...", attributes: [
-                .font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor.tertiaryLabelColor
-            ]))
-
-        case .failed(let reason):
-            s.append(NSAttributedString(string: "\n\(indent) \(reason)", attributes: [
-                .font: NSFont.systemFont(ofSize: 10),
-                .foregroundColor: NSColor(red: 0.9, green: 0.5, blue: 0.2, alpha: 1.0)
-            ]))
-
-        case .idle: break
-        }
-
-        item.attributedTitle = s
-        if isActive {
-            item.isEnabled = false
-        } else {
-            item.target = self; item.action = #selector(switchAccount(_:))
-            item.representedObject = acct.alias
-        }
-        menu.addItem(item)
+        statusItem.menu = nil
     }
 
     // MARK: - Actions
 
     @objc private func switchAccount(_ sender: NSMenuItem) {
         guard let alias = sender.representedObject as? String else { return }
+        switchAccount(alias: alias)
+    }
+
+    private func switchAccount(alias: String) {
         if authManager.switchTo(alias: alias) {
             updateMenu()
             // Refresh in background after a delay, don't block UI
@@ -465,6 +265,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func deleteAccount(_ sender: NSMenuItem) {
         guard let alias = sender.representedObject as? String else { return }
+        deleteAccount(alias: alias)
+    }
+
+    private func deleteAccount(alias: String) {
         if alias == authManager.currentAlias() {
             let a = NSAlert(); a.messageText = "无法移除当前账号"
             a.informativeText = "请先切换到其他账号。"; a.alertStyle = .warning; a.runModal()
@@ -557,32 +361,54 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func setRefreshInterval(_ sender: NSMenuItem) {
-        config.refreshIntervalMinutes = sender.tag
+        setRefreshInterval(sender.tag)
+    }
+
+    private func setRefreshInterval(_ minutes: Int) {
+        config.refreshIntervalMinutes = minutes
         saveConfig(); scheduleTimer(); updateMenu()
     }
 
     @objc private func setAlert5hThreshold(_ sender: NSMenuItem) {
-        config.alert5hThreshold = sender.tag
+        setAlert5hThreshold(sender.tag)
+    }
+
+    private func setAlert5hThreshold(_ threshold: Int) {
+        config.alert5hThreshold = threshold
         saveConfig(); previousAlertState = (false, false); updateMenu()
     }
 
     @objc private func setAlertWeekThreshold(_ sender: NSMenuItem) {
-        config.alertWeekThreshold = sender.tag
+        setAlertWeekThreshold(sender.tag)
+    }
+
+    private func setAlertWeekThreshold(_ threshold: Int) {
+        config.alertWeekThreshold = threshold
         saveConfig(); previousAlertState = (false, false); updateMenu()
     }
 
     @objc private func setRestartCodexAfterSwitch(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? String,
               let mode = RestartCodexAfterSwitch(rawValue: value) else { return }
+        setRestartCodexAfterSwitch(mode)
+    }
+
+    private func setRestartCodexAfterSwitch(_ mode: RestartCodexAfterSwitch) {
         config.restartCodexAfterSwitch = mode
         saveConfig(); updateMenu()
     }
 
     @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
         if #available(macOS 13.0, *) {
+            setLaunchAtLogin(SMAppService.mainApp.status != .enabled)
+        }
+    }
+
+    private func setLaunchAtLogin(_ enabled: Bool) {
+        if #available(macOS 13.0, *) {
             do {
-                if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
-                else { try SMAppService.mainApp.register() }
+                if enabled { try SMAppService.mainApp.register() }
+                else { try SMAppService.mainApp.unregister() }
                 updateMenu()
             } catch {
                 let alert = NSAlert()

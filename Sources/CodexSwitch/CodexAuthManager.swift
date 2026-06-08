@@ -1,3 +1,4 @@
+import CodexSwitchPreview
 import Foundation
 
 // MARK: - Auth Manager
@@ -41,7 +42,7 @@ class CodexAuthManager {
         let targetFile = "\(accountsDir)/\(alias).json"
         guard fm.fileExists(atPath: targetFile) else { return false }
 
-        if !current.isEmpty && current != "?" && fm.fileExists(atPath: authFile) {
+        if shouldSaveCurrentAuth(currentAlias: current) {
             let currentAccountFile = "\(accountsDir)/\(current).json"
             let tmpFile = currentAccountFile + ".\(UUID().uuidString).tmp"
             do {
@@ -76,6 +77,19 @@ class CodexAuthManager {
         } else {
             try fm.moveItem(atPath: replacementPath, toPath: destinationPath)
         }
+    }
+
+    private func shouldSaveCurrentAuth(currentAlias: String) -> Bool {
+        let fm = FileManager.default
+        guard !currentAlias.isEmpty, currentAlias != "?", fm.fileExists(atPath: authFile) else { return false }
+        let currentAccountFile = "\(accountsDir)/\(currentAlias).json"
+        guard fm.fileExists(atPath: currentAccountFile),
+              let authAccount = parseAccountFile(authFile, alias: "_auth"),
+              let currentAccount = parseAccountFile(currentAccountFile, alias: currentAlias)
+        else { return false }
+        return authAccount.email != "?"
+            && authAccount.email == currentAccount.email
+            && authAccount.accountId == currentAccount.accountId
     }
 
     func syncAuthToAccounts() {

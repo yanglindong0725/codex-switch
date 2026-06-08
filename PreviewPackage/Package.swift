@@ -3,21 +3,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "CodexSwitch",
+    name: "CodexSwitchPreviewPackage",
     platforms: [
         .macOS(.v11)
     ],
     products: [
-        .executable(name: "CodexSwitch", targets: ["CodexSwitch"]),
         .library(name: "CodexSwitchPreview", type: .dynamic, targets: ["CodexSwitchPreview"])
     ],
     targets: [
         .target(
             name: "CodexSwitchPreview"
-        ),
-        .executableTarget(
-            name: "CodexSwitch",
-            dependencies: ["CodexSwitchPreview"]
         )
     ]
 )
