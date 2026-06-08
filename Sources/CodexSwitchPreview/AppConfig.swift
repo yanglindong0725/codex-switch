@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - Config
+// MARK: - 配置
 
 public enum RestartCodexAfterSwitch: String {
     case ask
@@ -11,8 +11,8 @@ public enum RestartCodexAfterSwitch: String {
 public struct AppConfig {
     public var refreshIntervalMinutes: Int = 30
     public var minRefreshIntervalSeconds: Int = 30
-    public var alert5hThreshold: Int = 30    // alert when 5h remaining < this %
-    public var alertWeekThreshold: Int = 10  // alert when week remaining < this %
+    public var alert5hThreshold: Int = 30    // 5 小时额度低于该百分比时提醒
+    public var alertWeekThreshold: Int = 10  // 每周额度低于该百分比时提醒
     public var restartCodexAfterSwitch: RestartCodexAfterSwitch = .ask
 
     public init(

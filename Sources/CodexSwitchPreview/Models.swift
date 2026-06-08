@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-// MARK: - Data Models
+// MARK: - 数据模型
 
 public struct CodexAccount {
     public let alias: String
