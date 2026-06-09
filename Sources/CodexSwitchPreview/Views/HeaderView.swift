@@ -26,10 +26,6 @@ struct HeaderView: View {
                 Capsule()
                     .stroke(Color.white.opacity(0.18), lineWidth: 1)
             )
-
-            Image(systemName: "hexagon")
-                .font(.system(size: 19, weight: .medium))
-                .foregroundColor(.white.opacity(0.9))
         }
         .padding(.horizontal, 22)
         .padding(.top, 18)
