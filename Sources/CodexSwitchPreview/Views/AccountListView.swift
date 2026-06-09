@@ -62,11 +62,14 @@ struct OtherAccountRow: View {
             AccountAvatar(account: account, isActive: false, size: 52)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(account.alias)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(Palette.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                HStack(spacing: 8) {
+                    Text(account.alias)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(Palette.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    PlanBadge(account: account, prominence: .light)
+                }
                 Text(maskEmail(account.email))
                     .font(.system(size: 15))
                     .foregroundColor(Palette.mutedInk)
@@ -103,11 +106,14 @@ struct SwitchConfirmationView: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("切换到 \(account.alias)")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Palette.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                HStack(spacing: 7) {
+                    Text("切换到 \(account.alias)")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(Palette.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    PlanBadge(account: account, prominence: .light)
+                }
                 Text(maskEmail(account.email))
                     .font(.system(size: 12, weight: .regular))
                     .foregroundColor(Palette.mutedInk)

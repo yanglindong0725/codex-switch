@@ -34,15 +34,32 @@ public struct CodexAccount {
     }
 
     public var planColor: NSColor {
-        switch plan {
+        switch normalizedPlan {
+        case "enterprise": return NSColor(red: 0.45, green: 0.38, blue: 0.95, alpha: 1.0)
+        case "business": return NSColor(red: 0.15, green: 0.45, blue: 0.75, alpha: 1.0)
         case "team": return NSColor(red: 0.2, green: 0.5, blue: 1.0, alpha: 1.0)
         case "pro": return NSColor(red: 0.6, green: 0.35, blue: 0.9, alpha: 1.0)
         case "plus": return NSColor(red: 0.2, green: 0.75, blue: 0.5, alpha: 1.0)
+        case "go": return NSColor(red: 0.2, green: 0.65, blue: 0.7, alpha: 1.0)
+        case "free": return NSColor.secondaryLabelColor
         default: return .secondaryLabelColor
         }
     }
 
-    public var planLabel: String { plan.uppercased() }
+    public var normalizedPlan: String {
+        switch plan.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "free": return "free"
+        case "go": return "go"
+        case "plus": return "plus"
+        case "pro", "prolite": return "pro"
+        case "team": return "team"
+        case "business": return "business"
+        case "enterprise": return "enterprise"
+        default: return "unknown"
+        }
+    }
+
+    public var planLabel: String { normalizedPlan.uppercased() }
 }
 
 public struct RateLimitWindow {

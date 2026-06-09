@@ -13,9 +13,14 @@ struct ActiveAccountView: View {
             HStack(spacing: 18) {
                 AccountAvatar(account: account, isActive: true, size: 52)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(account.alias)
-                        .font(.system(size: 24, weight: .semibold))
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 9) {
+                        Text(account.alias)
+                            .font(.system(size: 24, weight: .semibold))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        PlanBadge(account: account, prominence: .dark)
+                    }
                     Text(maskEmail(account.email))
                         .font(.system(size: 15, weight: .regular))
                         .foregroundColor(.white.opacity(0.72))
