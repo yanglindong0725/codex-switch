@@ -80,7 +80,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let minInterval = TimeInterval(config.minRefreshIntervalSeconds)
             rateLimitClient.refreshIfNeeded(authManager.listAccounts(), minInterval: minInterval)
             updateMenu()
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            let popoverMenuBarInset: CGFloat = 8
+            let anchorRect = button.bounds.offsetBy(dx: 0, dy: popoverMenuBarInset)
+            popover.show(relativeTo: anchorRect, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
     }

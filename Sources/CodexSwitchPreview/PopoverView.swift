@@ -9,6 +9,7 @@ public struct CodexSwitchPopoverView: View {
     @ObservedObject var model: SwitcherViewModel
     @State private var showsSettings = false
     @State private var showsRemoveAccounts = false
+    @State private var pendingSwitchAlias: String?
 
     public init(model: SwitcherViewModel) {
         self.model = model
@@ -27,7 +28,7 @@ public struct CodexSwitchPopoverView: View {
                 EmptyActiveAccountView()
             }
 
-            AccountListView(model: model)
+            AccountListView(model: model, pendingSwitchAlias: $pendingSwitchAlias)
 
             ActionListView(
                 model: model,
