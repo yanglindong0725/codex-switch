@@ -1,4 +1,5 @@
 import AppKit
+import CodexSwitchCore
 import CodexSwitchPreview
 import Foundation
 import ServiceManagement
@@ -15,6 +16,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var fileMonitor: DispatchSourceFileSystemObject?
     private let rateLimitClient = RateLimitClient()
     private var refreshTimer: Timer?
+    private var authChangeWorkItem: DispatchWorkItem?
+    private var loginPollTimer: Timer?
+    private var loginPollingDeadline: Date?
     private var config = AppConfig.load()
     private var previousAlertState: (p5h: Bool, pWk: Bool) = (false, false)
     private var canUseUserNotifications: Bool {
@@ -33,7 +37,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if canUseUserNotifications {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
-        authManager.syncAuthToAccounts()
+        syncCurrentAuth(showErrors: true)
         updateMenu()
         watchAuthFile()
         rateLimitClient.fetchAll(authManager.listAccounts())
@@ -310,6 +314,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             backupFile = try authManager.prepareForNewLogin()
             updateMenu()
             try openCodexLoginTerminal(backupFile: backupFile)
+            startLoginCompletionPolling()
         } catch {
             let restoreMessage: String
             if let backupFile = backupFile {
@@ -430,18 +435,68 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
-    private var lastFileEventTime: Date = .distantPast
     private var authFileMonitor: DispatchSourceFileSystemObject?
 
     private func onAuthChanged() {
-        let now = Date()
-        guard now.timeIntervalSince(lastFileEventTime) > 2 else { return }
-        lastFileEventTime = now
-        authManager.syncAuthToAccounts()
-        updateMenu()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            guard let self = self else { return }
-            self.rateLimitClient.fetchAll(self.authManager.listAccounts())
+        authChangeWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.syncCurrentAuth(showErrors: false)
+        }
+        authChangeWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+    }
+
+    @discardableResult
+    private func syncCurrentAuth(showErrors: Bool) -> AuthSyncResult {
+        do {
+            let result = try authManager.syncAuthToAccounts()
+            updateMenu()
+            if result == .invalidAuth && showErrors {
+                showAuthSyncError("auth.json 缺少有效的 email 或 account_id。")
+            }
+            if case .saved = result {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                    guard let self = self else { return }
+                    self.rateLimitClient.fetchAll(self.authManager.listAccounts())
+                }
+            }
+            return result
+        } catch {
+            updateMenu()
+            if showErrors {
+                showAuthSyncError(error.localizedDescription)
+            }
+            return .invalidAuth
+        }
+    }
+
+    private func showAuthSyncError(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "无法同步 Codex 账号"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.runModal()
+    }
+
+    private func startLoginCompletionPolling() {
+        loginPollTimer?.invalidate()
+        loginPollingDeadline = Date().addingTimeInterval(120)
+        loginPollTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
+            guard let self = self else {
+                timer.invalidate()
+                return
+            }
+            if let deadline = self.loginPollingDeadline, Date() > deadline {
+                timer.invalidate()
+                self.loginPollTimer = nil
+                self.loginPollingDeadline = nil
+                return
+            }
+            if case .saved = self.syncCurrentAuth(showErrors: false) {
+                timer.invalidate()
+                self.loginPollTimer = nil
+                self.loginPollingDeadline = nil
+            }
         }
     }
 
@@ -489,6 +544,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
+let instanceLock = CodexSwitchInstanceLock()
+do {
+    guard try instanceLock.acquire() else {
+        let alert = NSAlert()
+        alert.messageText = "Codex Switch 已在运行"
+        alert.informativeText = "请使用已经打开的菜单栏实例，避免多个实例同时写入账号文件。"
+        alert.alertStyle = .informational
+        alert.runModal()
+        exit(0)
+    }
+} catch {
+    let alert = NSAlert()
+    alert.messageText = "无法启动 Codex Switch"
+    alert.informativeText = "无法创建单实例锁：\(error.localizedDescription)"
+    alert.alertStyle = .warning
+    alert.runModal()
+    exit(1)
+}
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()

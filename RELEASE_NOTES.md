@@ -1,17 +1,17 @@
-# Codex Switch v2.0
+# Codex Switch v2.1.0
 
-Interaction-focused release for safer account switching and a more refined popover workflow.
+Reliability release for safer multi-account persistence during add-account and switch flows.
 
 ## Changes
 
-- Added a two-step account switching flow: clicking an account now opens a confirmation panel instead of switching immediately.
-- Highlighted the pending account selection and added explicit cancel/switch actions to reduce accidental switches.
-- Adjusted the menu bar popover anchor so the panel sits closer to the menu bar.
-- Kept the underlying account persistence path unchanged; this release changes when switching is triggered, not how account files are written.
+- Added a single-instance lock so debug and installed copies cannot write the Codex auth files at the same time.
+- Reworked account sync to match by both email and account ID, and to write account files atomically.
+- Added login-completion polling plus debounced auth-file watching so new logins are not missed.
+- Added temp-directory tests for account persistence, invalid auth handling, and instance locking.
 
 ## Install
 
-Download `Codex-Switch-v2.0.dmg`, open it, and copy `Codex Switch.app` to Applications.
+Download `Codex-Switch-v2.1.0.dmg`, open it, and copy `Codex Switch.app` to Applications.
 
 This release is not signed or notarized with an Apple Developer account. macOS may require manually allowing the app in System Settings the first time it is opened.
 
