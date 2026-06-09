@@ -9,6 +9,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "CodexSwitch", targets: ["CodexSwitch"]),
+        .executable(name: "CodexSwitchDebugPreview", targets: ["CodexSwitchDebugPreview"]),
         .library(name: "CodexSwitchPreview", type: .dynamic, targets: ["CodexSwitchPreview"])
     ],
     targets: [
@@ -17,6 +18,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "CodexSwitch",
+            dependencies: ["CodexSwitchPreview"]
+        ),
+        .executableTarget(
+            name: "CodexSwitchDebugPreview",
             dependencies: ["CodexSwitchPreview"]
         )
     ]

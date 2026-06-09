@@ -1,0 +1,44 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:codexSwitcher}",
+      "name": "Debug CodexSwitch",
+      "target": "CodexSwitch",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug CodexSwitch"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:codexSwitcher}",
+      "name": "Release CodexSwitch",
+      "target": "CodexSwitch",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release CodexSwitch"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:codexSwitcher}",
+      "name": "Debug CodexSwitchDebugPreview",
+      "target": "CodexSwitchDebugPreview",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug CodexSwitchDebugPreview"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:codexSwitcher}",
+      "name": "Release CodexSwitchDebugPreview",
+      "target": "CodexSwitchDebugPreview",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release CodexSwitchDebugPreview"
+    }
+  ]
+}

@@ -1,12 +1,11 @@
 import Foundation
 import SwiftUI
 
-#if DEBUG
 /// Canvas 预览使用的空操作。
 ///
 /// 预览不能读写真正的 `.codex` 文件，也不能启动登录流程或退出应用。这些闭包
 /// 让 Canvas 里的 UI 可以点击，但不会产生副作用。
-extension SwitcherActions {
+public extension SwitcherActions {
     static let preview = SwitcherActions(
         refreshUsage: {},
         addAccount: {},
@@ -25,7 +24,7 @@ extension SwitcherActions {
 ///
 /// 需要测试长账号名、加载状态、空状态或低额度颜色时，改这里即可，不需要改动
 /// 本机真实账号文件。
-extension SwitcherViewModel {
+public extension SwitcherViewModel {
     static func preview() -> SwitcherViewModel {
         let model = SwitcherViewModel(actions: .preview)
         let now = Date()
@@ -96,8 +95,3 @@ extension SwitcherViewModel {
         return model
     }
 }
-
-#Preview("Popover") {
-    CodexSwitchPopoverView(model: .preview())
-}
-#endif

@@ -17,6 +17,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var refreshTimer: Timer?
     private var config = AppConfig.load()
     private var previousAlertState: (p5h: Bool, pWk: Bool) = (false, false)
+    private var canUseUserNotifications: Bool {
+        Bundle.main.bundleURL.pathExtension == "app"
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -27,7 +30,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         popover.contentSize = NSSize(width: 430, height: 720)
         popover.contentViewController = NSHostingController(rootView: CodexSwitchPopoverView(model: viewModel))
         rateLimitClient.onUpdate = { [weak self] in self?.updateMenu() }
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        if canUseUserNotifications {
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
         authManager.syncAuthToAccounts()
         updateMenu()
         watchAuthFile()
@@ -112,6 +117,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func sendNotification(title: String, body: String) {
+        guard canUseUserNotifications else { return }
         let content = UNMutableNotificationContent()
         content.title = title; content.body = body; content.sound = .default
         UNUserNotificationCenter.current().add(
