@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="Codex Switch"
-VERSION="2.1.0"
+VERSION="2.1.1"
 DMG_NAME="Codex-Switch-v${VERSION}.dmg"
 STAGING_DIR="release"
 

@@ -4,11 +4,32 @@ import SwiftUI
 ///
 /// 想调整应用标题字号、在线状态胶囊、右侧图标或顶部深色渐变高度时，主要改这里。
 struct HeaderView: View {
+    private var versionLabel: String? {
+        guard let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+              !version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return "v\(version)"
+    }
+
     var body: some View {
         HStack(spacing: 16) {
-            Text("Codex Switch")
-                .font(.system(size: 20, weight: .regular, design: .default))
-                .foregroundColor(.white)
+            HStack(spacing: 9) {
+                Text("Codex Switch")
+                    .font(.system(size: 20, weight: .regular, design: .default))
+                    .foregroundColor(.white)
+
+                if let versionLabel {
+                    Text(versionLabel)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.72))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                        )
+                }
+            }
 
             Spacer()
 
